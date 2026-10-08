@@ -64,6 +64,21 @@ winget install Gyan.FFmpeg                           # then restart the terminal
 
 ## 2. Installation
 
+### Windows: ready-made app (no Python needed)
+
+1. Download **`MultilingualAudioStudio-<version>-windows-x64.zip`** from the
+   [latest release](https://github.com/buzzwordExpert/indian_languages_tts/releases/latest).
+2. Unzip it anywhere, e.g. `C:\Tools\MultilingualAudioStudio\`.
+3. Double-click **`MultilingualAudioStudio.exe`**.
+   - The first start takes a few seconds while the app unpacks itself.
+   - If SmartScreen shows *"Windows protected your PC"*, click **More info → Run anyway**. The app isn't
+     code-signed.
+
+FFmpeg (`ffmpeg.exe`, `ffplay.exe`) is included in the zip and found automatically. Keep it in the same folder
+as the `.exe`. If you already have FFmpeg on `PATH`, you can download just the standalone `.exe` from the release.
+
+### From source (Windows, Linux, macOS)
+
 ```bash
 git clone https://github.com/buzzwordExpert/indian_languages_tts.git
 cd indian_languages_tts
@@ -81,6 +96,10 @@ pip install -e ".[translate]"        # drop [translate] to skip deep-translator
 ```
 
 ## 3. Launching the app
+
+**Windows app:** double-click `MultilingualAudioStudio.exe`, or drag a project `.json` onto it to open that project.
+
+**From source:**
 
 ```bash
 python run.py                        # from the repository folder
@@ -356,6 +375,9 @@ indian_languages_tts/
 │   └── gui.py             # Tkinter interface
 ├── docs/
 │   └── multilingual_audio_workflow_detailed.pdf   # project requirements & workflow document
+├── .github/
+│   ├── workflows/windows-release.yml   # builds the Windows .exe and publishes releases
+│   └── release-notes/                  # release notes, one file per version tag
 ├── run.py                 # launcher for a source checkout
 ├── requirements.txt
 ├── pyproject.toml
@@ -378,6 +400,33 @@ manifest = load_manifest(output_base(cfg))
 jobs, _ = build_jobs([entry], cfg, manifest)
 summary = run_pipeline(jobs, cfg, manifest, threading.Event(), lambda kind, payload: None)
 print(summary["done"], "files written to", summary["base"])
+```
+
+### Building the Windows executable
+
+Releases are built by GitHub Actions ([`windows-release.yml`](.github/workflows/windows-release.yml)) on a
+Windows runner:
+
+1. PyInstaller packs the app into a single windowed `MultilingualAudioStudio.exe`.
+2. The latest stable FFmpeg LGPL build is downloaded and `ffmpeg.exe` + `ffplay.exe` are added to the zip.
+3. A smoke test checks that the bundled FFmpeg runs and that the app's main window opens.
+4. On a version tag, the zip and the standalone `.exe` are attached to a GitHub release.
+
+Pull requests run steps 1–3 and upload the build as a workflow artifact. To publish a new version:
+
+```bash
+# bump the version in pyproject.toml and src/indian_tts/__init__.py, then:
+#   add .github/release-notes/vX.Y.Z.md
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+To build locally on Windows instead:
+
+```powershell
+pip install -r requirements.txt pyinstaller
+pyinstaller --noconfirm --onefile --windowed --name MultilingualAudioStudio --paths src --hidden-import deep_translator run.py
+# result: dist\MultilingualAudioStudio.exe (put ffmpeg.exe and ffplay.exe next to it)
 ```
 
 ## License

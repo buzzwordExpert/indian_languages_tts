@@ -1263,6 +1263,8 @@ def main():
             ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except Exception:
             pass
+    if getattr(sys, "frozen", False):  # packaged .exe: use the ffmpeg/ffplay shipped beside it
+        os.environ["PATH"] = os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")
     app = App()
     if len(sys.argv) > 1 and os.path.isfile(sys.argv[1]):
         app.open_project(sys.argv[1])

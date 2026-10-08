@@ -1,0 +1,121 @@
+name: Windows build & release
+
+# Tag push (v1.0.0, v1.1.0, ...)          -> build, test and publish a GitHub release.
+# Push to main / pull requests / manual run -> build and test only (download from the run's artifacts).
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APP: MultilingualAudioStudio
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build executable
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name $env:APP --paths src --hidden-import deep_translator
+          run.py
+
+      - name: Download FFmpeg (LGPL static build)
+        run: |
+          $rel = Invoke-RestMethod https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest `
+                   -Headers @{ Authorization = "Bearer ${{ github.token }}" }
+          $asset = $rel.assets |
+            Where-Object { $_.name -match '^ffmpeg-n[\d.]+-latest-win64-lgpl-[\d.]+\.zip$' } |
+            Sort-Object { [version]($_.name -replace '^.*-lgpl-([\d.]+)\.zip$', '$1') } -Descending |
+            Select-Object -First 1
+          if (-not $asset) { throw "No FFmpeg LGPL win64 build found" }
+          Write-Host "Using $($asset.name)"
+          Invoke-WebRequest $asset.browser_download_url -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_dl
+          $root = (Get-ChildItem ffmpeg_dl -Directory | Select-Object -First 1).FullName
+          "FFMPEG_ROOT=$root" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Assemble package
+        run: |
+          $ver = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "dev-$("${{ github.sha }}".Substring(0, 7))" }
+          $stage = "$env:APP-$ver-windows-x64"
+          New-Item -ItemType Directory $stage | Out-Null
+          Copy-Item "dist\$env:APP.exe" $stage
+          Copy-Item "$env:FFMPEG_ROOT\bin\ffmpeg.exe", "$env:FFMPEG_ROOT\bin\ffplay.exe" $stage
+          Copy-Item "$env:FFMPEG_ROOT\LICENSE.txt" "$stage\FFMPEG-LICENSE.txt"
+          Copy-Item LICENSE "$stage\LICENSE.txt"
+          @"
+          Multilingual Audio Studio $ver
+          ==============================
+
+          1. Double-click $env:APP.exe. The first start takes a few seconds while it unpacks.
+             If Windows SmartScreen says "Windows protected your PC", click
+             More info -> Run anyway (the app is not code-signed).
+          2. Keep ffmpeg.exe and ffplay.exe in this folder: they convert MP3 to WAV and
+             play the previews. The app finds them automatically.
+          3. An internet connection is required (gTTS and translation use Google's servers).
+
+          Full guide: https://github.com/${{ github.repository }}#readme
+
+          FFmpeg is included unmodified under the LGPL (see FFMPEG-LICENSE.txt).
+          Source code: https://ffmpeg.org  Build: https://github.com/BtbN/FFmpeg-Builds
+          "@ | Out-File "$stage\README.txt" -Encoding utf8
+          Compress-Archive "$stage\*" "$stage.zip"
+          Copy-Item "dist\$env:APP.exe" "$env:APP-$ver.exe"
+          "STAGE=$stage" | Out-File $env:GITHUB_ENV -Append
+          "VER=$ver" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Smoke test (bundled FFmpeg + app window opens)
+        run: |
+          foreach ($tool in "ffmpeg", "ffplay") {
+            & "$env:STAGE\$tool.exe" -hide_banner -version | Select-Object -First 1
+            if ($LASTEXITCODE -ne 0) { throw "bundled $tool.exe does not run" }
+          }
+          Start-Process "$env:STAGE\$env:APP.exe" -WorkingDirectory $env:STAGE | Out-Null
+          $ok = $false
+          for ($i = 0; $i -lt 90 -and -not $ok; $i++) {
+            Start-Sleep -Seconds 1
+            $ok = [bool](Get-Process $env:APP -ErrorAction SilentlyContinue |
+                         Where-Object { $_.MainWindowTitle -like "*Multilingual Audio Studio*" })
+          }
+          $procs = Get-Process $env:APP -ErrorAction SilentlyContinue
+          $procs | ForEach-Object { Write-Host "window: '$($_.MainWindowTitle)'" }
+          $procs | Stop-Process -Force
+          if (-not $ok) { throw "The app window did not appear within 90 s" }
+          Write-Host "App started and showed its main window."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.STAGE }}
+          path: |
+            ${{ env.STAGE }}.zip
+            ${{ env.APP }}-${{ env.VER }}.exe
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Multilingual Audio Studio ${{ github.ref_name }}
+          body_path: .github/release-notes/${{ github.ref_name }}.md
+          files: |
+            ${{ env.STAGE }}.zip
+            ${{ env.APP }}-${{ env.VER }}.exe
