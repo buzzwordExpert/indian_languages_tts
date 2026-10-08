@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "indian-tts"
-version = "1.0.0"
+version = "1.0"
 description = "Tkinter studio that turns English text into hardware-ready WAV audio in English, Hindi, Marathi, Bengali, Gujarati and Sanskrit (gTTS + FFmpeg)."
 readme = "README.md"
 license = { file = "LICENSE" }
