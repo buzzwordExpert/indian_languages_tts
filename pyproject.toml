@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "indian-tts"
+version = "1.0.0"
+description = "Tkinter studio that turns English text into hardware-ready WAV audio in English, Hindi, Marathi, Bengali, Gujarati and Sanskrit (gTTS + FFmpeg)."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+dependencies = ["gTTS>=2.3"]
+
+[project.optional-dependencies]
+translate = ["deep-translator>=1.11"]
+
+[project.gui-scripts]
+audio-studio = "indian_tts.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

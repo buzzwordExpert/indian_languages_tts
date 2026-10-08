@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Generated audio and run artefacts
+*.mp3
+*.wav
+*.part
+manifest.json
+failed_files.csv
+multilingual_audio_output/
+_test_run/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

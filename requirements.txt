@@ -1,0 +1,3 @@
+gTTS>=2.3
+# Optional: more reliable auto-translation (the app falls back to Google's public endpoint)
+deep-translator>=1.11
