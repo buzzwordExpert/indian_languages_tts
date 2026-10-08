@@ -84,24 +84,25 @@ jobs:
           "STAGE=$stage" | Out-File $env:GITHUB_ENV -Append
           "VER=$ver" | Out-File $env:GITHUB_ENV -Append
 
-      - name: Smoke test (bundled FFmpeg + app window opens)
+      - name: Smoke test (bundled FFmpeg runs, app starts and finds gTTS/FFmpeg)
         run: |
+          trap { Write-Host "::error::Smoke test: $_"; exit 1 }
           foreach ($tool in "ffmpeg", "ffplay") {
-            & "$env:STAGE\$tool.exe" -hide_banner -version | Select-Object -First 1
-            if ($LASTEXITCODE -ne 0) { throw "bundled $tool.exe does not run" }
+            $out = & "$env:STAGE\$tool.exe" -hide_banner -version
+            if ($LASTEXITCODE -ne 0) { throw "bundled $tool.exe failed (exit $LASTEXITCODE)" }
+            Write-Host $out[0]
           }
-          Start-Process "$env:STAGE\$env:APP.exe" -WorkingDirectory $env:STAGE | Out-Null
-          $ok = $false
-          for ($i = 0; $i -lt 90 -and -not $ok; $i++) {
-            Start-Sleep -Seconds 1
-            $ok = [bool](Get-Process $env:APP -ErrorAction SilentlyContinue |
-                         Where-Object { $_.MainWindowTitle -like "*Multilingual Audio Studio*" })
-          }
-          $procs = Get-Process $env:APP -ErrorAction SilentlyContinue
-          $procs | ForEach-Object { Write-Host "window: '$($_.MainWindowTitle)'" }
-          $procs | Stop-Process -Force
-          if (-not $ok) { throw "The app window did not appear within 90 s" }
-          Write-Host "App started and showed its main window."
+          # The app writes what it can find to this file and quits (see AUDIO_STUDIO_SMOKE_TEST in gui.py).
+          # Run from another folder with a clean PATH so only the bundled FFmpeg can be found.
+          $report = Join-Path $env:RUNNER_TEMP "smoke.json"
+          $env:AUDIO_STUDIO_SMOKE_TEST = $report
+          $env:PATH = "C:\Windows\system32;C:\Windows"
+          $p = Start-Process "$env:GITHUB_WORKSPACE\$env:STAGE\$env:APP.exe" -WorkingDirectory $env:RUNNER_TEMP -PassThru
+          if (-not $p.WaitForExit(180000)) { $p | Stop-Process -Force; throw "app did not exit within 180 s" }
+          if (-not (Test-Path $report)) { throw "app exited (code $($p.ExitCode)) without writing $report" }
+          $r = Get-Content $report -Raw | ConvertFrom-Json
+          Write-Host "Packaged app reports: gTTS=$($r.gtts) ffmpeg=$($r.ffmpeg) ffplay=$($r.ffplay)"
+          if (-not ($r.gtts -and $r.ffmpeg -and $r.ffplay)) { throw "packaged app is missing a dependency" }
 
       - uses: actions/upload-artifact@v4
         with:

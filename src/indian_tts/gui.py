@@ -26,7 +26,7 @@ from .content import (content_to_entries, entries_to_content, entry_status, expo
                       read_csv_entries, slugify, write_csv_entries)
 from .pipeline import (build_jobs, convert_to_wav, ffmpeg_available, folder_size, gTTS,
                        load_manifest, output_base, read_failed_csv, run_pipeline)
-from .playback import open_folder, play_audio
+from .playback import find_ffplay, open_folder, play_audio
 from .translation import translate_text
 
 
@@ -1268,6 +1268,14 @@ def main():
     app = App()
     if len(sys.argv) > 1 and os.path.isfile(sys.argv[1]):
         app.open_project(sys.argv[1])
+    report = os.environ.get("AUDIO_STUDIO_SMOKE_TEST")
+    if report:  # CI check for the packaged app: record what it can find, then quit
+        def smoke_test():
+            with open(report, "w", encoding="utf-8") as fh:
+                json.dump({"gtts": gTTS is not None, "ffmpeg": ffmpeg_available("ffmpeg"),
+                           "ffplay": find_ffplay("ffmpeg") is not None}, fh)
+            app.destroy()
+        app.after(1000, smoke_test)
     app.mainloop()
 
 

@@ -16,4 +16,4 @@ Requirements:  Python 3.8+, gTTS (pip install gTTS), FFmpeg on PATH.
 Optional:      deep-translator (pip install deep-translator) for auto-translation.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0"
